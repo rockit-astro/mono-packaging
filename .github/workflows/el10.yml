@@ -1,0 +1,47 @@
+name: "Packaging (el10)"
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ ubuntu-24.04, ubuntu-24.04-arm ]
+    name: Build Package
+    runs-on: ${{ matrix.os }}
+    container: rockylinux/rockylinux:10-minimal
+    steps:
+      - name: Install Dependencies
+        run: |
+          microdnf -y install dnf epel-release
+          /usr/bin/crb enable
+          dnf -y install bison cairo-devel cmake fontconfig-devel freetype-devel gcc gcc-c++ gettext-devel giflib-devel git glib2-devel gpg libexif-devel libicu-devel libjpeg-devel libpng-devel libtiff-devel make perl-Getopt-Long pkgconfig python3 rpm-build rpm-sign valgrind-devel which zlib-devel
+
+      - name: Clone Repository
+        uses: actions/checkout@v4
+
+      - name: Package RPM
+        run: |
+          cat mono-6.12.0.199.tar.xz.* >  mono-6.12.0.199.tar.xz
+          make libgdiplus
+          rpm -i *.rpm
+          make mono-bootstrap
+          rpm -i *bootstrap.*.rpm
+          rm *bootstrap.*.rpm
+          make mono
+          make mono-basic
+
+      - name: Clone Package Repository
+        uses: actions/checkout@v4
+        with:
+          repository: rockit-astro/el10
+          token: ${{ secrets.DEPLOY_TOKEN }}
+          path: packages
+
+      - name: Sign and Push Packages
+        env:
+          RPM_SIGNING_KEY: ${{ secrets.RPM_SIGNING_KEY }}
+        run: packages/sign-and-push-packages.sh *.rpm
